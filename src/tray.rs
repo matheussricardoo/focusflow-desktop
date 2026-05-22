@@ -322,10 +322,10 @@ mod tests {
         tray.sync_state(&state);
 
         assert_eq!(tray.id(), "focusflow-desktop");
-        assert_eq!(tray.icon_name(), "alarm-symbolic");
+        assert_eq!(tray.icon_name(), "");
         assert_eq!(tray.title(), "FF F 05:00");
         assert_eq!(tray.text_direction(), TextDirection::LeftToRight);
-        assert!(tray.icon_pixmap().is_empty());
+        assert!(!tray.icon_pixmap().is_empty());
     }
 
     #[test]
@@ -458,7 +458,7 @@ mod tests {
     }
 
     #[test]
-    fn icon_name_covers_all_phase_running_combinations() {
+    fn icon_pixmap_covers_all_phase_running_combinations() {
         let (mut tray, _rx) = make_tray_with_receiver();
 
         tray.sync_state(&PomodoroState {
@@ -467,7 +467,14 @@ mod tests {
             remaining: std::time::Duration::from_secs(60),
             completed_focus_sessions: 0,
         });
-        assert_eq!(tray.icon_name(), "media-record-symbolic");
+        assert_eq!(tray.icon_name(), "");
+        let pixmaps = tray.icon_pixmap();
+        assert_eq!(pixmaps.len(), 5);
+        assert_eq!(pixmaps[0].width, 16);
+        assert_eq!(pixmaps[1].width, 22);
+        assert_eq!(pixmaps[2].width, 24);
+        assert_eq!(pixmaps[3].width, 32);
+        assert_eq!(pixmaps[4].width, 48);
 
         tray.sync_state(&PomodoroState {
             phase: PomodoroPhase::Break,
@@ -475,7 +482,8 @@ mod tests {
             remaining: std::time::Duration::from_secs(60),
             completed_focus_sessions: 0,
         });
-        assert_eq!(tray.icon_name(), "face-smile-symbolic");
+        let pixmaps = tray.icon_pixmap();
+        assert_eq!(pixmaps.len(), 5);
 
         tray.sync_state(&PomodoroState {
             phase: PomodoroPhase::Break,
@@ -483,7 +491,8 @@ mod tests {
             remaining: std::time::Duration::from_secs(60),
             completed_focus_sessions: 0,
         });
-        assert_eq!(tray.icon_name(), "appointment-soon-symbolic");
+        let pixmaps = tray.icon_pixmap();
+        assert_eq!(pixmaps.len(), 5);
     }
 
     #[test]
@@ -602,12 +611,7 @@ impl Tray for PomodoroTray {
     }
 
     fn icon_name(&self) -> String {
-        match (self.phase, self.running) {
-            (PomodoroPhase::Focus, true) => "media-record-symbolic".into(),
-            (PomodoroPhase::Focus, false) => "alarm-symbolic".into(),
-            (PomodoroPhase::Break, true) => "face-smile-symbolic".into(),
-            (PomodoroPhase::Break, false) => "appointment-soon-symbolic".into(),
-        }
+        String::new()
     }
 
     fn title(&self) -> String {
@@ -929,6 +933,106 @@ impl Tray for PomodoroTray {
     }
 
     fn icon_pixmap(&self) -> Vec<Icon> {
-        Vec::new()
+        let color = match (self.phase, self.running) {
+            (PomodoroPhase::Focus, true) => {
+                // Solid active Focus: strong vibrant red (#EF4444 = 239, 68, 68)
+                (255, 239, 68, 68)
+            }
+            (PomodoroPhase::Focus, false) => {
+                // Paused Focus: faded vibrant red (40% opacity = 102)
+                (102, 239, 68, 68)
+            }
+            (PomodoroPhase::Break, true) => {
+                // Solid active Break: strong vibrant green (#22C55E = 34, 197, 94)
+                (255, 34, 197, 94)
+            }
+            (PomodoroPhase::Break, false) => {
+                // Paused Break: faded vibrant green (40% opacity = 102)
+                (102, 34, 197, 94)
+            }
+        };
+
+        vec![
+            make_icon(16, 16, color),
+            make_icon(22, 22, color),
+            make_icon(24, 24, color),
+            make_icon(32, 32, color),
+            make_icon(48, 48, color),
+        ]
+    }
+}
+
+// Custom clock icon rendering helper functions using anti-aliased super-sampling.
+fn dist_to_segment(p: (f64, f64), a: (f64, f64), b: (f64, f64)) -> f64 {
+    let dx = b.0 - a.0;
+    let dy = b.1 - a.1;
+    let len_sq = dx * dx + dy * dy;
+    if len_sq == 0.0 {
+        let px = p.0 - a.0;
+        let py = p.1 - a.1;
+        return (px * px + py * py).sqrt();
+    }
+    let t = (((p.0 - a.0) * dx + (p.1 - a.1) * dy) / len_sq).clamp(0.0, 1.0);
+    let proj_x = a.0 + t * dx;
+    let proj_y = a.1 + t * dy;
+    let rx = p.0 - proj_x;
+    let ry = p.1 - proj_y;
+    (rx * rx + ry * ry).sqrt()
+}
+
+fn is_inside_ring(x: f64, y: f64) -> bool {
+    let dx = x - 12.0;
+    let dy = y - 12.0;
+    let dist_sq = dx * dx + dy * dy;
+    // Outer radius 8.5 (dist_sq <= 72.25), inner radius 7.2 (dist_sq >= 51.84), perfectly centered
+    dist_sq >= 7.2 * 7.2 && dist_sq <= 8.5 * 8.5
+}
+
+fn is_inside_hands(x: f64, y: f64) -> bool {
+    let p = (x, y);
+    // Vertical hour hand: (12, 12) to (12, 8.2), thickness 1.3 (radius 0.65)
+    let d_hour = dist_to_segment(p, (12.0, 12.0), (12.0, 8.2));
+    // Diagonal minute hand: (12, 12) to (15.2, 15.2), thickness 1.3 (radius 0.65)
+    let d_minute = dist_to_segment(p, (12.0, 12.0), (15.2, 15.2));
+    d_hour <= 0.65 || d_minute <= 0.65
+}
+
+fn make_icon(width: i32, height: i32, color: (u8, u8, u8, u8)) -> Icon {
+    let mut data = Vec::with_capacity((width * height * 4) as usize);
+    let samples = 4; // 4x4 grid for super-sampling (anti-aliasing)
+
+    for row in 0..height {
+        for col in 0..width {
+            let mut inside_count = 0;
+            for sy in 0..samples {
+                for sx in 0..samples {
+                    let px = col as f64 + (sx as f64 + 0.5) / samples as f64;
+                    let py = row as f64 + (sy as f64 + 0.5) / samples as f64;
+
+                    // Map px, py from [0, width/height] to SVG coordinate system [0, 24]
+                    let mx = px * 24.0 / width as f64;
+                    let my = py * 24.0 / height as f64;
+
+                    if is_inside_ring(mx, my) || is_inside_hands(mx, my) {
+                        inside_count += 1;
+                    }
+                }
+            }
+
+            let coverage = inside_count as f64 / (samples * samples) as f64;
+
+            // ARGB32 format in Network Byte Order (Big-Endian): [A, R, G, B]
+            let pixel_alpha = (coverage * color.0 as f64) as u8;
+            data.push(pixel_alpha);
+            data.push(color.1);
+            data.push(color.2);
+            data.push(color.3);
+        }
+    }
+
+    Icon {
+        width,
+        height,
+        data,
     }
 }

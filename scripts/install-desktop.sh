@@ -63,9 +63,10 @@ if [ ! -f "$BIN_SRC" ]; then
   exit 1
 fi
 
-mkdir -p "$HOME/.local/bin" "$HOME/.local/share/applications" "$HOME/.config/autostart"
+mkdir -p "$HOME/.local/bin" "$HOME/.local/share/applications" "$HOME/.config/autostart" "$HOME/.local/share/icons/hicolor/scalable/apps"
 cp "$BIN_SRC" "$BIN_DEST"
 chmod +x "$BIN_DEST"
+cp "$ROOT_DIR/packaging/focusflow-desktop.svg" "$HOME/.local/share/icons/hicolor/scalable/apps/focusflow-desktop.svg"
 
 sed "s|^Exec=.*|Exec=$BIN_DEST|" "$DESKTOP_SRC" > "$DESKTOP_DEST"
 
@@ -81,4 +82,5 @@ fi
 
 echo "Installed binary: $BIN_DEST"
 echo "Installed desktop entry: $DESKTOP_DEST"
+echo "Installed launcher icon: $HOME/.local/share/icons/hicolor/scalable/apps/focusflow-desktop.svg"
 echo "You can now launch FocusFlow Desktop from the app menu."
