@@ -1,96 +1,33 @@
-<div align="center">
+# FocusFlow Desktop
 
-<img width="100%" src="https://capsule-render.vercel.app/api?type=waving&color=ffffff&height=200&section=header&text=FocusFlow%20Desktop&fontSize=50&fontColor=000&animation=twinkling&fontAlignY=40&desc=Tray-based%20Pomodoro%20for%20Linux%20Mint%20Cinnamon&descAlignY=60&descSize=18">
+A Rust Pomodoro timer for Linux system trays. It demonstrates state transitions, asynchronous command/event channels, local persistence and automated tests. It is a desktop utility, not a backend service.
 
-<p align="center">
-  <i>A lightweight Pomodoro timer that lives in your system tray, built in Rust with a focus on practical daily use.</i>
-</p>
+## Implemented
 
----
+- Tray controls for start/pause, reset, skip and quit.
+- Focus/break phases with configurable intervals and optional automatic continuation.
+- TOML configuration with bounded intervals and presets.
+- Persistent timer state, focused time and session statistics.
+- Desktop notifications and optional finish/test sounds.
+- Desktop-entry and optional autostart installer.
 
-### Features
+## Run locally
 
-<div align="center">
-
-| Feature | Description |
-|:---:|:---|
-| Tray-first workflow | Runs in the system tray (SNI) with no required main window |
-| Core controls | Start/Pause, Reset, Config submenu, and Quit directly from tray menu |
-| Timer engine | Focus/Break state machine with automatic phase transitions |
-| Auto-next option | Optional auto-start when switching to the next phase |
-| Runtime config menu | Increase/decrease work and break intervals from tray without restart |
-| Presets | One-click presets: 25/5, 50/10, 90/20 |
-| Live status | Tray title and tooltip update with current phase and remaining time |
-| Notifications | Desktop notifications on phase completion via `notify-rust` |
-| Configurable intervals | `work_minutes` and `break_minutes` loaded from config file |
-| Validation | Config values are clamped to safe ranges (work: 1-180, break: 1-60) |
-| Persistent settings | Config stored in user config directory using TOML + Serde |
-| Session restore | Last timer state is persisted and restored after app restart |
-| Productivity stats | Tracks sessions and focused time for today and all-time |
-| Stats controls | Reset today stats or all-time stats directly from tray |
-| Finish sound | Fallback chain: `canberra-gtk-play` -> `paplay` -> `pw-play` -> `aplay` -> terminal bell |
-| Packaging support | Includes `.desktop` entry and local installer script |
-
-</div>
-
-### Getting Started
-
-To run this project locally, you only need Rust installed.
+Requires Rust and a Linux desktop session with a compatible tray and D-Bus/notification services. Audio helpers are optional. No cloud account or paid service is required.
 
 ```bash
-# Clone the repository
-git clone https://github.com/your-user/focusflow-desktop.git
-
-# Navigate to project directory
+git clone https://github.com/matheussricardoo/focusflow-desktop.git
 cd focusflow-desktop
-
-# Build check
-cargo check
-
-# Run the app
-cargo run
+cargo check --locked
+cargo test --locked
+cargo run --locked
 ```
 
-When running, the app lives in the tray. Use `Ctrl+C` in the terminal to stop it.
+Use the tray menu after launch; there is no main application window. A graphical tray/session is required for interactive validation.
 
-### Technologies
+## Configuration and storage
 
-This project is a native Rust desktop utility focused on low overhead and simple reliability.
-
-<div align="center">
-
-<a href="https://www.rust-lang.org/"><img src="https://skillicons.dev/icons?i=rust" alt="Rust"/></a>
-<a href="https://www.kernel.org/"><img src="https://skillicons.dev/icons?i=linux" alt="Linux"/></a>
-<a href="https://www.gnu.org/software/bash/"><img src="https://skillicons.dev/icons?i=bash" alt="Shell"/></a>
-<a href="https://github.com/"><img src="https://skillicons.dev/icons?i=github" alt="GitHub"/></a>
-
-*Core crates: ksni, tokio, notify-rust, directories, serde, toml*
-
-</div>
-
-### Configuration
-
-The app creates and loads `config.toml` automatically.
-
-Typical Linux path:
-
-```text
-~/.config/focusflow-desktop/config.toml
-```
-
-Supported keys:
-
-- `work_minutes`
-- `break_minutes`
-- `sound_on_finish`
-- `auto_start_next_phase`
-
-Validation ranges:
-
-- `work_minutes`: 1 to 180
-- `break_minutes`: 1 to 60
-
-Example:
+On a typical Linux installation, config and state files are stored under `~/.config/focusflow-desktop/`:
 
 ```toml
 work_minutes = 25
@@ -99,57 +36,24 @@ sound_on_finish = true
 auto_start_next_phase = false
 ```
 
-### Project Structure
+Work duration is clamped to 1–180 minutes and break duration to 1–60. Daily statistics use UTC day boundaries. Runtime state and statistics are TOML files, not a shared database or cloud sync service.
 
-```text
-focusflow-desktop/
-├── src/
-│   ├── main.rs       # App entrypoint and event orchestration
-│   ├── pomodoro.rs   # Timer state machine
-│   ├── tray.rs       # Tray UI and tray actions
-│   ├── config.rs     # Config loading and saving
-│   ├── storage.rs    # Runtime state + daily/all-time stats persistence
-│   └── sound.rs      # Finish sound playback fallback
-├── packaging/
-│   └── focusflow-desktop.desktop
-├── scripts/
-│   └── install-desktop.sh
-├── Cargo.toml
-└── README.md
-```
+Sound playback tries paplay, pw-play and aplay for each known sound file, then canberra-gtk-play and a terminal bell. Availability and audio output depend on the desktop environment.
 
-### Packaging
-
-Build release binary and install desktop entry locally:
+## Optional installation
 
 ```bash
-sh scripts/install-desktop.sh
-```
-
-By default, the installer runs `cargo build --release` automatically.
-
-If you want to skip rebuild and install the current release binary as-is:
-
-```bash
+cargo build --release --locked
+sh scripts/install-desktop.sh --help
 sh scripts/install-desktop.sh --no-build
 ```
 
-Install and enable autostart on login:
+The installer writes the binary/desktop entry into user-local directories. `--autostart` additionally enables login startup. The installer was not executed during the portfolio review.
 
-```bash
-sh scripts/install-desktop.sh --autostart
-```
+## Validation and limits
 
-Install and ensure autostart is disabled:
+The existing **61 tests passed** during the review. They exercise configuration, state transitions, persistence, sound fallback logic and tray actions. They do not prove visual tray behavior, notification delivery or working audio on every Linux desktop. Manual graphical validation remains required.
 
-```bash
-sh scripts/install-desktop.sh --no-autostart
-```
+## Author and license
 
-### License
-
-This project is licensed under the MIT License.
-
-<img width="100%" src="https://capsule-render.vercel.app/api?type=waving&color=ffffff&height=120&section=footer"/>
-
-</div>
+[Matheus Ricardo](https://github.com/matheussricardoo) · [LinkedIn](https://www.linkedin.com/in/matheussricardoo/). See [LICENSE](LICENSE).
